@@ -8,7 +8,7 @@
 
 import SpriteKit
 import GameplayKit
-//import RealmSwift
+import RealmSwift
 
 class GameScene: SKScene, SKPhysicsContactDelegate {
     
@@ -19,7 +19,9 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     let birdTexture2 = SKTexture(imageNamed: "flappy2.png")
     var score = 0
     var gameOverLabel = SKLabelNode()
+    var highScoreLabel = SKLabelNode()
     var timer = Timer()
+    var gameStarted = false
     
     enum ColliderType: UInt32 {
         case Bird = 1
@@ -83,22 +85,40 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
                 self.speed = 0
                 gameOver = true
                 timer.invalidate()
+                gameStarted = false
                 
-//                let scoreObject = Score()
-//                scoreObject.score = score
-//                let realm = try! Realm()
-//                let currentHighScore = realm.objects(Score.self)
-//                if currentHighScore.count == 0 {
-//                    try! realm.write {
-//                        realm.add(scoreObject)
-//                    }
-//                } else {
-//                    if (currentHighScore.first?.score)! < score {
-//                        try! realm.write {
-//                            currentHighScore.first?.score = score
-//                        }
-//                    }
-//                }
+                let scoreObject = Score()
+                scoreObject.score = score
+                let realm = try! Realm()
+                
+                // SCORE
+                let currentHighScore = realm.objects(Score.self)
+                // if there is no high score recorded yet
+                if currentHighScore.count == 0 {
+                    do {
+                        try realm.write {
+                            realm.add(scoreObject)
+                        }
+                        highScoreLabel.text = "NEW HIGH SCORE: \(realm.objects(Score.self).first!.score)"
+                    } catch {
+                        print("Error saving score, \(error)")
+                    }
+                    
+                } else {
+                    if currentHighScore.first!.score < score {
+                        do {
+                            try realm.write {
+                                currentHighScore.first?.score = score
+                            }
+                            highScoreLabel.text = "NEW HIGH SCORE: \(score)"
+                        } catch {
+                            print("Error overwriting score, \(error)")
+                        }
+                    }
+                    else {
+                        highScoreLabel.text = "High score: \(realm.objects(Score.self).first!.score)"
+                    }
+                }
                 
                 gameOverLabel.fontName = "Helvetica"
                 gameOverLabel.fontSize = 30
@@ -106,6 +126,10 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
                 gameOverLabel.position = CGPoint(x: self.frame.midX, y: self.frame.midY)
                 self.addChild(gameOverLabel)
                 
+                highScoreLabel.fontName = "Helvetica"
+                highScoreLabel.fontSize = 50
+                highScoreLabel.position = CGPoint(x: self.frame.midX, y: self.frame.midY + 50)
+                self.addChild(highScoreLabel)
             }
         }
     }
@@ -116,8 +140,6 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     }
     
     func setupGame() {
-        timer = Timer.scheduledTimer(timeInterval: 3, target: self, selector: #selector(self.makePipes), userInfo: nil, repeats: true)
-        
         // bg
         let bgTexture = SKTexture(imageNamed: "bg.png")
         
@@ -172,10 +194,17 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
         if gameOver == false {
+            // start timer to generate pipes
+            if !gameStarted {
+                gameStarted = true
+                timer = Timer.scheduledTimer(timeInterval: 3, target: self, selector: #selector(self.makePipes), userInfo: nil, repeats: true)
+            }
+            // bird movement
             bird.physicsBody?.isDynamic = true
             bird.physicsBody?.velocity = CGVector(dx: 0, dy: 0)
             bird.physicsBody?.applyImpulse(CGVector(dx: 0, dy: 70))
         } else {
+            // restart the game
             gameOver = false
             score = 0
             self.speed = 1
